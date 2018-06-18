@@ -1,6 +1,6 @@
 ---
-title: "FPCC01"
-subtitle: "Inferência via ICs"
+title: "FPCC02 - Regressão"
+subtitle: "Beleza e avaliação"
 author:
 - name: "Tiago Clementino"
 date: "`r format(Sys.Date(), '%d de %B de %Y')`"
@@ -18,10 +18,6 @@ vignette: >
   %\VignetteEngine{knitr::rmarkdown}
 ---
 
->Abstract
->
-> A exploratory report involving an analysis task proposed by Wikimedias Foundation. The work described here aims to find specific relationships between the properties present in the data. The result is some useful conclusions that may be reached only on the basis of the available information.
-
 ```{r setup, message=FALSE, warning=FALSE, echo=FALSE}
 library(tidyverse)
 library(here)
@@ -31,10 +27,14 @@ library(gridExtra)
 ```
 
 ```{r read, include=FALSE}
-buscas = read_csv(here::here("data/search_data.csv"))
+evals = read_csv(here::here("data/evals.csv"))
 
-#buscas = buscas %>% 
-#    mutate(day = round_date(session_start_date, unit = "day"))
+paleta = c("#404E4D",
+           "#92DCE5",
+           "#938BA1",
+           "#2D3142",
+           "#F4743B")
+
 ```
 # Objetivo
 
@@ -83,26 +83,228 @@ O campo `action` pode ter os seguintes valores:
 * `checkin`: quando o usuário permaneceu em uma página por um intervalo de tempo pré-definido.
 
 
-### Descrição do objetivo
+### O que vamos fazer?
 
-O objetivo aqui é criar um relatório reproduzível respondendo por inferência estatística m IC, de acordo com os dados, as seguintes perguntas:
+O objetivo aqui é criar um relatório analizando a correlação entre o score do professor e sua aparência física. Para isto, precisamos usar técnicas de regressão para analisar a influência de alguns dos fatores presentes nos dados.
 
 
- - **Q1**. Qual é a *clickthrough rate* geral diária? Como isto varia entre os grupos?
+ - **1**. Vou começar com uma regressão simples para medir a correlação entre *score* (avaliação em si) e *bty_avg* (avaliação da aparência do professor).
 
- - **Q2**. Quais resultados da busca (posições) as pessoas tendem a seguir primeiro? Como isto varia dia após dia?
-
- - **Q3**. Qual é a *zero results rate* geral diária? Como isto varia entre os grupos?
+ - **2**. Aqui vou deixar de lado a variável *bty_avg* (beleza) e tentar medir a correlação entre *score* e quatro fatores que julgo possam ser relevantes na direção do requisito beleza física: *cls_level* (nível da disciplina), *age* (idade), *ethnicity* (perfil étnico miniritário ou não) e *gender* (homem ou mulher). À princípio faço quatro regressões simples separadas e observo a correlação entre *score* e cada uma das variáveis. Em seguida comparo com um modelo multivariado envolvendo todas as quatro variáveis. A pergunta que quero responder aqui é: Estes quatro fatores tem mais influência em *score* que *bty_avg* (beleza)?
  
- - **Q1.b**. Responda **Q1** novamente, porém utilize apenas o grupo A, o dividindo randomicamente em dois grupos A e A'.
+
+### Mais sobre os dados
+
+Aqui vou apenas observar a "aparência" dos dados. 
+
+```{r}
+
+evals %>% 
+  ggplot(aes(x = score)) + 
+  geom_histogram(bins = 15, fill = paleta[1], colour = 'white') + 
+    labs(x='Avaliação',  
+        y="Densidade", 
+        title="Densidade da Distribuição do Score dos Docentes", 
+        subtitle="(score, density)", 
+        caption="Universidade do Texas em Austin") +
+    theme(plot.title = element_text(face="bold",size = "15"),
+        plot.subtitle = element_text(size = "10"),
+        plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        legend.position="none",
+        panel.border=element_blank())
+
+evals %>% 
+  ggplot(aes(x = bty_avg)) + 
+  geom_histogram(bins = 15, fill = paleta[3], colour = 'white') + 
+    labs(x='bty_avg',  
+        y="Densidade", 
+        title="Densidade da Distribuição de Beleza Física dos Docentes", 
+        subtitle="(bty_avg, density)", 
+        caption="Universidade do Texas em Austin") +
+    theme(plot.title = element_text(face="bold",size = "15"),
+        plot.subtitle = element_text(size = "10"),
+        plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        legend.position="none",
+        panel.border=element_blank())
+
+```
+
+A principio, a correlação entre beleza e avaliação do professor parece bem tênue.
+
+```{r}
 
 
-*A questão **Q4** descrita na tarefa da Wikimedia fogeiugj ao escopo deste relatório.
+evals %>% 
+  ggplot(aes(x = score, y = bty_avg)) + 
+  geom_point() + 
+    labs(x='Avaliação',  
+        y="Beleza", 
+        title="Avaliação X Beleza física", 
+        subtitle="(score, bty_avg)", 
+        caption="Universidade do Texas em Austin") +
+    theme(plot.title = element_text(face="bold",size = "15"),
+        plot.subtitle = element_text(size = "10"),
+        plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        legend.position="none",
+        panel.border=element_blank())
+
+```
+
+Agora observe a distribuição das outras quatro variáveis e sua correlação com a avaliação do professor.
+
+```{r}
+
+evals %>% 
+  ggplot(aes(x = cls_level)) + 
+  geom_bar(fill = paleta[1], colour = 'white') + 
+    labs(x='Avaliação',  
+        y="Densidade", 
+        title="Densidade da Distribuição do Score dos Docentes", 
+        subtitle="(score, density)", 
+        caption="Universidade do Texas em Austin") +
+    theme(plot.title = element_text(face="bold",size = "15"),
+        plot.subtitle = element_text(size = "10"),
+        plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        legend.position="none",
+        panel.border=element_blank())
+
+evals %>% 
+  ggplot(aes(x = age)) + 
+  geom_histogram(bins = 15, fill = paleta[3], colour = 'white') + 
+    labs(x='bty_avg',  
+        y="Densidade", 
+        title="Densidade da Distribuição de Beleza Física dos Docentes", 
+        subtitle="(bty_avg, density)", 
+        caption="Universidade do Texas em Austin") +
+    theme(plot.title = element_text(face="bold",size = "15"),
+        plot.subtitle = element_text(size = "10"),
+        plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        legend.position="none",
+        panel.border=element_blank())
+
+evals %>% 
+  ggplot(aes(x = ethnicity)) + 
+  geom_bar(fill = paleta[3], colour = 'white') + 
+    labs(x='bty_avg',  
+        y="Densidade", 
+        title="Densidade da Distribuição de Beleza Física dos Docentes", 
+        subtitle="(bty_avg, density)", 
+        caption="Universidade do Texas em Austin") +
+    theme(plot.title = element_text(face="bold",size = "15"),
+        plot.subtitle = element_text(size = "10"),
+        plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        legend.position="none",
+        panel.border=element_blank())
+
+evals %>% 
+  ggplot(aes(x = gender)) + 
+  geom_bar(fill = paleta[3], colour = 'white') + 
+    labs(x='bty_avg',  
+        y="Densidade", 
+        title="Densidade da Distribuição de Beleza Física dos Docentes", 
+        subtitle="(bty_avg, density)", 
+        caption="Universidade do Texas em Austin") +
+    theme(plot.title = element_text(face="bold",size = "15"),
+        plot.subtitle = element_text(size = "10"),
+        plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        legend.position="none",
+        panel.border=element_blank())
 
 
-### Dados tratados
+evals %>% 
+  ggplot(aes(y = score, x = gender)) + 
+  geom_jitter(width = .1, alpha = .3) + 
+    labs(x='Avaliação',  
+        y="Beleza", 
+        title="Avaliação X Beleza física", 
+        subtitle="(score, bty_avg)", 
+        caption="Universidade do Texas em Austin") +
+    theme(plot.title = element_text(face="bold",size = "15"),
+        plot.subtitle = element_text(size = "10"),
+        plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        legend.position="none",
+        panel.border=element_blank())
 
-Para Facilitar nosso esforço em resolver as quatro questões, tratei os dados utilizando o script "import-events_to_searches.R" (editado a partir da versão inicial presente no repositório original do *lab 02 checkpoint 04*). As informações que antes eram referentes a eventos pontuais, agora foram agrupadas em buscas (com possivelmente mais de um evento). Os novos dados, agora simplificados e mais fáceis de tratar, estão dispostos em uma tabela com as seguintes colunas:
+
+evals %>% 
+  ggplot(aes(y = score, x = ethnicity)) + 
+  geom_jitter(width = .1, alpha = .3) + 
+  geom_boxplot(outlier.alpha = .0) + 
+    labs(x='Avaliação',  
+        y="Beleza", 
+        title="Avaliação X Beleza física", 
+        subtitle="(score, bty_avg)", 
+        caption="Universidade do Texas em Austin") +
+    theme(plot.title = element_text(face="bold",size = "15"),
+        plot.subtitle = element_text(size = "10"),
+        plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        legend.position="none",
+        panel.border=element_blank())
+
+
+evals %>% 
+  ggplot(aes(y = score, x = cls_level)) + 
+  geom_jitter(width = .1, alpha = .3) + 
+    labs(x='Avaliação',  
+        y="Beleza", 
+        title="Avaliação X Beleza física", 
+        subtitle="(score, bty_avg)", 
+        caption="Universidade do Texas em Austin") +
+    theme(plot.title = element_text(face="bold",size = "15"),
+        plot.subtitle = element_text(size = "10"),
+        plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        legend.position="none",
+        panel.border=element_blank())
+
+evals %>% 
+  ggplot(aes(y = score, x = age)) + 
+  geom_point() + 
+    labs(x='Avaliação',  
+        y="Beleza", 
+        title="Avaliação X Beleza física", 
+        subtitle="(score, bty_avg)", 
+        caption="Universidade do Texas em Austin") +
+    theme(plot.title = element_text(face="bold",size = "15"),
+        plot.subtitle = element_text(size = "10"),
+        plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        legend.position="none",
+        panel.border=element_blank())
+
+```
+
 
 
 | Campo                      | Tipo    | Descrição                                                             |
