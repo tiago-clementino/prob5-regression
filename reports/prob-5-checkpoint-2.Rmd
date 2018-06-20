@@ -54,7 +54,7 @@ Neste laboratório analisarei os dados coletados para um estudo realizado na Uni
 
 O conjunto de dados vem de uma iniciativa realizada na Universidade do Texas em Austin. Trata-se de um conjunto de avaliações discentes de final de semestre de uma grande amostra de professores. Além disto, seis estudantes avaliaram a aparência física dos professores. O resultado é um banco de dados no qual cada linha diz respeito a uma disciplina (que diz respeito a um ou mais professores) e cada coluna representa uma variável sobre sua respectiva disciplina/professor(es).
 
-Abaixo veja uma tabela que representa nosso modelo de dados. Cada linha abaixo trata de uma variável que diz respeito a um atributo de certa disciplina/professor(es).
+Abaixo veja uma tabela que representa nosso modelo de dados. Cada linha trata de uma variável que diz respeito a um atributo de certa disciplina/professor(es).
 
 | Campo           | Tipo     | Descrição                                                                                           |
 |-----------------|----------|-----------------------------------------------------------------------------------------------------|
@@ -88,7 +88,7 @@ O objetivo aqui é criar um relatório analisando a correlação entre o "score"
 
  - **1**. Vou começar com uma regressão simples para medir a correlação entre `score` (avaliação em si) e `bty_avg` (avaliação da aparência do professor).
 
- - **2**. Aqui faremos algo mais elaborado. A ideia é propor um modelo que explique o comportamento de `score` não apenas usando `bty_avg` (beleza), mas também outros fatores relacionados à aparência física do professor ou que possam influenciar nas avaliações. Proponho medir a correlação segundo o modelo `score` ~ `bty_avg` + X, sendo X = {`age`,`gender`,`cls_perc_eval`,`cls_students`}.
+ - **2**. Aqui faremos algo mais elaborado. A ideia é propor um modelo que explique o comportamento de `score` não apenas usando `bty_avg` (beleza), mas também outros fatores relacionados à aparência física do professor ou algo que possa influenciar as avaliações. Proponho medir a correlação segundo o modelo `score` ~ `bty_avg` + X, sendo X = {`age`,`gender`,`cls_perc_eval`,`cls_students`}.
  
 
 ### Mais sobre os dados
@@ -105,9 +105,9 @@ evals0_150 = evals %>% filter(cls_students <= 150)
 
 ```
 
-Primeiramente, com o intuito de equilibrar nossos dados, separei a amostra em duas, um de cursos com mais de 150 alunos e outra com os demais. Isto foi feito por entender que se tratam de modalidades muito diferentes de educação e, por isto, devem ser tratadas separadamente. Em seguida eliminei cursos onde cem por cento dos alunos responderam o questionário, por acreditar que forçar o aluno a responder pode gerar uma falta de comprometimento com as respostas.
+No código acima, com o intuito de equilibrar nossos dados, separei a amostra em duas, um de cursos com até 150 alunos e outra com os demais. Isto foi feito por entender que se tratam de modalidades muito diferentes de educação e, por isto, devem ser tratadas separadamente. Em seguida eliminei cursos onde cem por cento dos alunos responderam o questionário, por acreditar que forçar o aluno a responder pode gerar uma falta de comprometimento com as respostas.
 
-As análises se deram na amostra com até 150 alunos, por ainda ser a modalidade principal de educação. Apenas os resultados finais faram uma comparação entre ambas.
+As análises se deram prioritariamente para a amostra com até 150 alunos, por ainda ser a modalidade principal de educação. Os resultados finais são comparados entre ambas.
 
 Agora vou apenas observar a "aparência" dos dados. 
 
@@ -173,7 +173,7 @@ evals0_150 %>%
 
 ```
 
-Agora observe a distribuição das outras quatro variáveis e sua correlação com a avaliação do professor.
+Agora observe a distribuição das outras quatro variáveis (conjunto **X** da etapa 2) e sua correlação com a avaliação do professor.
 
 ```{r}
 
@@ -328,7 +328,7 @@ grid.arrange(arrangeGrob(p1,p2,ncol=2,widths=c(1,1)),
 
 ```
 
-Perceba que separadamente não fica clara uma correlação de cada fator com a avaliação do professor. Buscarei detalhes deste relacionamento com base nas técnicas de regressão estudadas.
+Perceba que separadamente não fica clara uma correlação de cada fator do conjunto **X** com a avaliação do professor. Buscarei detalhes deste relacionamento com base nas técnicas de regressão estudadas.
 
 # A análise
 
@@ -403,23 +403,23 @@ evals_augmented %>%
 
 ```
 
-Se considerarmos que temos apenas uma amostra de nosso universo de avaliações dissentes de fim de período, o que podemos inferir a partir desse modelo sobre a relação entre a aparência física do professor e sua avaliação pelo aluno? 
+Se considerarmos que temos apenas uma amostra de nosso universo de avaliações discentes de fim de período, o que podemos inferir a partir desse modelo sobre a relação entre a aparência física do professor e sua avaliação pelo aluno? 
 
-> Aqui utilizei regressão linear simples para analisar se `score` tem uma correlação significativa com `bty_avg`. Os resultados indicam que o modelo com 1 preditor segundo o formato `score` = A + B.`bty_avg` explica 2,15% da variância da variável resposta (R2 = 0.0215) para nossa amostra de cursos com 150 alunos ou menos. Já nossa amostra com mais de 150 alunos, o mesmo modelo explica 56,57% da variação da variável resposta (R2 = 0.5657). Na amostra de cursos com até 150 alunos `bty_avg`, a beleza física do professor percebida pelos alunos, tem uma relação significativa com `score` (avaliação do professor), a mais de 97% e com IC em [0.0178,0.0858], porém de muito baixa magnitude. Já na amostra com mais de 150 alunos por curso, a mesma variável tem relação significativa com a variável resposta, à mais de 99% e com IC em [0.2497,0.4988], o que representa uma magnitude significativa levando em conta o domínio da variável de resposta `score` (0 a 5). O aumento de 1 unidade de `bty_avg` produz uma mudança de 0,052 em `score` na amostra com até 150 alunos por curso, o que corresponde, como mais de 97% de confiança, em um aumento entre 0,0178 e 0,0858 na população. Já na amostra com mais de 150 alunos por curso, o aumento de 1 unidade em `bty_avg` produz uma mudança de 0,374 na em `score` na amostra, o que corresponde, com mais de 99% de confiança, em um aumento entre 0,2497 e 0,4988 na população original.
+> Aqui utilizei regressão linear simples para analisar se `score` tem uma correlação significativa com `bty_avg`. Os resultados indicam que o modelo com 1 preditor segundo o formato `score` = A + B.`bty_avg` explica 2,15% da variância da variável resposta (R2 = 0.0215) para nossa amostra de cursos com 150 alunos ou menos. Já nossa amostra com mais de 150 alunos, o mesmo modelo explica 56,57% da variação da variável resposta (R2 = 0.5657). Na amostra de cursos com até 150 alunos `bty_avg`, a beleza física do professor percebida pelos alunos, tem uma relação significativa com `score` (avaliação do professor), a mais de 97% e com IC em [0.0178,0.0858], porém de muito baixa magnitude. Já na amostra com mais de 150 alunos por curso, o mesmo fator tem relação significativa com a variável resposta, à mais de 99% e com IC em [0,2497,0,4988], o que representa uma magnitude representativa, levando em conta o domínio da variável de resposta `score` [0,00;5,00]. O aumento de 1 unidade de `bty_avg` produz uma mudança de 0,052 em `score` na amostra com até 150 alunos por curso, o que corresponde, como mais de 97% de confiança, em um aumento entre 0,0178 e 0,0858 na população. Já na amostra com mais de 150 alunos por curso, o aumento de 1 unidade em `bty_avg` produz uma mudança de 0,374 na em `score` na amostra, o que corresponde, com mais de 99% de confiança, em um aumento entre 0,2497 e 0,4988 na população original.
 
 O que podemos concluir sobre a correlação entre estas duas variáveis nas duas amostras que separamos (e não população, com certa confiança)?
 
-> Com base no que foi observado é possível tirar duas conclusões, cada uma relacionada a sua amostra. Na amostra de cursos com até 150 alunos, apesar da alta significância dos resultados, a magnitude da correlação foi muito baixa, o que pode significar um nível mais elevado de comprometimento dos alunos para com a avaliação. Já na amostra de cursos com mais de 150 alunos, também com alta significância, percebemos que a magnitude da influência da beleza física na avaliação dos alunos é muito elevada levando o domínio de `score` em consideração [0,00;5,00].
-> Com base nos resultados, temos boas evidências que argumentam a favor de um nível de comprometimento mais elevado dos estudantes em cursos com menos alunos.
+> Com base no que foi observado é possível tirar duas conclusões, cada uma relacionada a sua amostra. Na amostra de cursos com até 150 alunos, apesar da alta significância dos resultados, a magnitude da correlação foi muito baixa, o que pode significar um nível mais elevado de comprometimento dos alunos para com a avaliação. Já na amostra de cursos com mais de 150 alunos, também com alta significância, percebemos que a magnitude da influência da beleza física na avaliação dos alunos é muito elevada levando o domínio de `score` [0,00;5,00], o que pode ser um sinal de falta de comprometimento.
+> Com base nos resultados, temos boas evidências que argumentam a favor de um nível de comprometimento (com a avaliação) mais elevado dos estudantes em cursos com menos alunos.
 
 
-### 2. Aqui faremos algo mais elaborado. A ideia é propor um modelo que explique o comportamento de `score` não apenas usando `bty_avg` (beleza), mas também outros fatores relacionados à aparência física do professor ou motivos que possam influenciar as avaliações. Proponho medir a correlação entre `score` ~ `bty_avg` + X, sendo X = {`age`,`gender`,`cls_perc_eval`,`cls_students`}.
+### 2. Aqui faremos algo mais elaborado. A ideia é propor um modelo que explique o comportamento de `score` não apenas usando `bty_avg` (beleza), mas também outros fatores relacionados à aparência física do professor ou algum fator que possa influenciar as avaliações. Proponho medir a correlação entre `score` ~ `bty_avg` + X, sendo X = {`age`,`gender`,`cls_perc_eval`,`cls_students`}.
 
 Da analise anterior trazemos uma boa noção de como a beleza do professor influencia sua avaliação em cursos com mais e menos alunos. Agora podemos testar mais variáveis criando um modelo de regressão linear múltipla que descreva melhor estas relações.
 
-`age` e `gender` são fatores que, de modo mais óbvio, estão relacionados a beleza física do professor na votação por parte dos alunos. Espero que `age` colabore de forma crescente com o `score` do professor, já `gender`, uma variável categórica, também deve ter relevância significativa. Finalmente, `cls_perc_eval` e `cls_students`, que tratam de questões mais relacionadas a motivos para falta de atenção, representam uma hipótese mais difícil de interpretar, mas creio que tenham fatores crescentes. Uma associação entre estas variáveis e `bty_avg` para descrever `score` seria um modelo melhor que o da análise anterior?
+`age` e `gender` são variáveis que, de modo mais óbvio, estão relacionados a beleza física do professor na votação por parte dos alunos. Espero que `age` colabore de forma crescente com o `score` do professor, já `gender`, uma variável categórica, também deve ter relevância significativa. Finalmente, `cls_perc_eval` e `cls_students`, que tratam de questões mais relacionadas a motivos para falta de atenção, representam uma hipótese mais difícil de interpretar, mas creio que tenham fatores crescentes. Uma associação entre estas variáveis e `bty_avg` para descrever `score` seria um modelo melhor que o da análise anterior?
 
-Particularmente, começarei fazendo quatro regressões múltiplas separadas, cada uma envolvendo `bty_avg` e um elemento de **X**, e observo a correlação existente com `score` em cada um dos quatro modelos apenas no contexto da amostra de até 150 alunos. Em seguida observo o comportamento das correlações um novo modelo multivariado, agora envolvendo todas as quatro variáveis e `bty_avg` e comparando os resultados nas duas amostras (<=150 e >150). A pergunta que quero responder aqui é: **Estes quatro fatores têm mais influência em `score` que `bty_avg` isoladamente?**
+Particularmente, começarei fazendo quatro regressões múltiplas separadas, cada uma envolvendo `bty_avg` e um elemento de **X**, e observo a correlação existente com `score` em cada um dos quatro modelos apenas no contexto da amostra de até 150 alunos. Em seguida observo o comportamento das correlações em um novo modelo multivariado, agora envolvendo todas as quatro variáveis e `bty_avg`. O modelo final é aplicado às duas amostras (<=150 e >150), comparando os resultados. A pergunta que quero responder aqui é: **Estes quatro fatores têm mais influência em `score` que `bty_avg` isoladamente?**
 
 ```{r}
 
@@ -445,9 +445,9 @@ glance(modelo5)
 
 ```
 
-Visualizar o modelo com muitas variáveis independentes fica mais difícil. Novamente testamos a correlação de certas variáveis com uma variável resposta `score` (acima). Aqui utilizamos sucessivas regressões lineares múltiplas para testar a correlação entre a variável resposta, `bty_avs` e as quatro variáveis de **X**. 
+Visualizar o modelo com muitas variáveis independentes fica mais difícil. Novamente testamos a correlação de certas variáveis com uma variável resposta `score` (o código acima). Aqui utilizamos sucessivas regressões lineares múltiplas para testar a correlação entre a variável resposta, `bty_avs` e as quatro variáveis de **X**. 
 
-A princípio medimos a correlação entre `score`, `bty_avg` e cada variável de **X** separadamente na amostra de cursos com 150 alunos ou menos. Nosso intuito era estimar os R2 e comparar cada um deles com um modelo envolvendo todas as variáveis. Com isto, assim que testarmos o modelo completo, caso este seja melhor que os modelos atuais, teremos uma evidência de que não há fatores exercendo influências negativas na correlação com nossa variável resposta.
+A princípio medimos a correlação entre `score`, `bty_avg` e cada variável de **X** separadamente na amostra de cursos com 150 alunos ou menos. Nosso intuito é estimar os R2 e comparar cada um deles com um modelo envolvendo todas as variáveis e assim, confirmar o pressuposto de não linearidade entre os dados. Com isto, assim que testarmos o modelo completo, caso este seja melhor que os modelos atuais, teremos uma evidência de que não há fatores exercendo influências cruzadas em pares.
 
 ```{r}
 
@@ -585,11 +585,11 @@ glance(modelo6b)
 
 ```
 
-Para o modelo final, convertendo nossas variáveis em uma descrição textual: Queremos saber se a aparência física do professor aliada à sua idade e sexo exercem influência sobre a avaliação que os alunos fazem dele, além de descobrir se o tamanho da turma e a taxa de resposta à avaliação também se correlacionam  com sua pontuação.
+Para o modelo final, convertendo nossas variáveis em uma descrição textual: Queremos saber se a aparência física do professor aliada à sua idade e sexo exercem influência sobre a avaliação que os alunos fazem dele, além de descobrir se o tamanho da turma e a taxa de resposta à avaliação também se correlacionam com sua pontuação.
 
 Utilizando regressão linear múltipla, analisamos se há correlação significativa entre `score` e `bty_avg`, `age`, `gender`, `cls_perc_eval` e `cls_students` em ambas as amostras. Os resultados mostraram que mesmo o modelo com cinco preditores no formato `score` = B0 + Bn.X, sendo n=|X| explica apenas 8,14% (pouco, porém, melhor que qualquer um dos modelos anteriores com apenas um ou dois preditores) do comportamento da variável de resposta `score` na amostra de cursos com 150 alunos ou menos (R2=0.0814). Já para a amostra de cursos com mais de 150 alunos, este modelo descreve muito bem a variável resposta à quase 80% (R2=0,799).
 
-Com base no modelo com cinco variáveis, podemos ver que os fatores de `cls_perc_eval`, `cls_students` e (surpreendentemente) `age` exercem pouca ou nenhuma influência sobre a variável resposta (por um IC que inclui zero ou p-valor inconclusivo), o que é inesperado, visto que o R2 destes fatores separadamente não pareciam inferiores aos de `bty_avg` e `gender`. Nas tabelas abaixo, para cada amostra, estão associadas cada uma das variáveis a modelos em que estão envolvidas, colocando lado a lado os respectivos R2 de tais modelos.
+Com base no modelo com cinco variáveis, podemos ver que os fatores de `cls_perc_eval`, `cls_students` e (surpreendentemente) `age` exercem pouca ou nenhuma influência sobre a variável resposta (por um IC que inclui zero ou p-valor >= 0,1), o que é inesperado, visto que o R2 destes fatores separadamente não pareciam inferiores aos de `bty_avg` e `gender`. Nas tabelas abaixo, para cada amostra, estão associadas cada uma das variáveis a modelos em que estão envolvidas, colocando lado a lado os respectivos R2 de tais modelos.
 
 
 | <=150           | Modelo 1 | Modelo 2 | Modelo 3 | Modelo 4 | Modelo 5 | Modelo 6 |
@@ -612,10 +612,10 @@ Com base no modelo com cinco variáveis, podemos ver que os fatores de `cls_perc
 | **R2**          |**0.5657**|    **-** |    **-** |    **-** |    **-** |**0.7991**|
 
 
-Com base nos resultados, podemos concluir que, diferente de nossa hipótese inicial, `cls_students` (total de estudantes), `cls_perc_eval` (percentual de estudantes que participaram) e `age` (idade do professor) exercem muito pouca influência sobre o `score` ou sobre o relacionamento entre `score`e `bty_avg`. Isto é surpreendente, sobretudo tendo em vista que usamos o total de estudantes para dividir nossa amostra em duas e os resultados foram bem diferentes de uma para outra. Com isto, podemos concluir que avaliações como estas em cursos voltados ao ensino em massa (>150 alunos) estão mais suscetíveis a sofrer influência de fatores como aparência do professor. Já na educação convencional (<=150 alunos) isto é pouco relevante.
+Com base nos resultados, podemos concluir que, diferente de nossa hipótese inicial, `cls_students` (total de estudantes), `cls_perc_eval` (percentual de estudantes que participaram) e `age` (idade do professor) exercem muito pouca influência sobre o `score` ou sobre o modelo envolvendo `score`e `bty_avg`. Isto é surpreendente, sobretudo tendo em vista que usamos o total de estudantes para dividir nossa amostra em duas e os resultados foram bem diferentes de uma para outra. Com isto, podemos concluir que avaliações como estas em cursos voltados ao ensino em massa (>150 alunos) estão mais suscetíveis a sofrer influência de fatores como aparência do professor. Já na educação convencional (<=150 alunos) isto é pouco relevante.
 
 # Sumário
 
-A partir dos modelos propostos identificamos que o gênero e a beleza do professor de fato exercem influência sobre a avaliação do aluno. Contudo, tal influência tem magnitude muito baixa em cursos com 150 alunos ou menos e muito alta em cursos de ensino em massa com mais de 150 alunos (descreve 80% do comportamento da amostra). Além disto, foi surpreendente constatar que, diferente do esperado, a idade do professor é pouco significativa para o modelo, mesmo em cursos voltados para ensino em larga escala, onde vimos que o fator beleza é  significativo e muito relevante.
+A partir dos modelos propostos identificamos que o gênero e a beleza do professor de fato exercem influência sobre a avaliação do aluno. Contudo, tal influência tem magnitude muito baixa em cursos com 150 alunos ou menos e muito alta em cursos de ensino em massa com mais de 150 alunos (descreve 80% do comportamento da amostra). Além disto, foi surpreendente constatar que, diferente do esperado, a idade do professor é pouco significativa para o modelo, mesmo em cursos voltados para ensino em larga escala, onde vimos que o fator beleza é significativo e muito relevante.
 
 Uma próxima medida seria definir o que leva alunos do ensino em massa a apresentar tal comportamento em avaliações.
