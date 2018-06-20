@@ -1,5 +1,5 @@
 ---
-title: "FPCC02 - Regressão"
+title: "Regressão"
 subtitle: "Beleza e avaliação"
 author:
 - name: "Tiago Clementino"
@@ -21,13 +21,16 @@ vignette: >
 ```{r setup, message=FALSE, warning=FALSE, echo=FALSE}
 library(tidyverse)
 library(here)
+library(broom)
+library(modelr)
 library(lubridate)
 library(boot)
 library(gridExtra)
 ```
 
 ```{r read, include=FALSE}
-evals = read_csv(here::here("data/evals.csv"))
+
+evals = read_csv(here::here("data/evals.csv")) 
 
 paleta = c("#404E4D",
            "#92DCE5",
@@ -36,70 +39,81 @@ paleta = c("#404E4D",
            "#F4743B")
 
 ```
+
+# Contexto
+
+Vários cursos universitários dão aos alunos a oportunidade de avaliar o curso e o professor de maneira anônima ao final do semestre. Contudo, o uso das avaliações dos alunos como um indicador da qualidade do curso e da eficácia do ensino é frequentemente criticado porque essas medidas podem refletir a influência de características não relacionadas à docência, tal como a aparência física do professor.
+
+
 # Objetivo
 
-Vamos reproduzir um problema de exploração de dados que a Fundação Wikimedia usou em 2016 no recrutamento de pessoas para trabalhar em seu departamento de descoberta. O objetivo é seguir as instruções colocadas na tarefa original, respondendo as 4 perguntas que são colocadas.
-
-Neste laboratório, o objetivo é explorar as possibilidades da inferência estatística por intervalos de confiança. A entrega consiste de um relatório explorando por inferência em IC as três primeiras perguntas do problema proposto pela Wikimedia. Além de uma análise da pergunta 01, agora comparando o grupo A internamento (dividido de forma aleatória), também por inferência em IC. 
+Neste laboratório analisarei os dados coletados para um estudo realizado na Universidade do Texas que buscava examinar a hipótese de que a beleza do professor influencia na percepção dos alunos a respeito de sua competência em sala de aula. A idéia básica é usar regressão para tentar descrever o comportamento da variável "avaliação do docente", com base em fatores relacionadas à aparência física do professor percebida pelo aluno.
 
 
-### Contexto
+### Descrição dos dados
 
-O departamento de descoberta da Fundação Wikimedia utiliza um registro de eventos (Event Logging, EL) para avaliar várias métricas de performance e usabilidade, ajudando-os a tomar decisões. Principalmente, este departamento está interessado em:
+O conjunto de dados vem de uma iniciativa realizada na Universidade do Texas em Austin. Trata-se de um conjunto de avaliações discentes de final de semestre de uma grande amostra de professores. Além disto, seis estudantes avaliaram a aparência física dos professores. O resultado é um banco de dados no qual cada linha diz respeito a uma disciplina (que diz respeito a um ou mais professores) e cada coluna representa uma variável sobre sua respectiva disciplina/professor(es).
 
+Abaixo veja uma tabela que representa nosso modelo de dados. Cada linha abaixo trata de uma variável que diz respeito a um atributo de certa disciplina/professor(es).
 
-* *clickthrough rate*: a proporção de sessões de busca onde o usuário clica em um dos resultados apresentados.
-
-* *zero results rate*: a proporção de buscas que não tiveram resultados.
-
-
-e outras métricas fora do escopo desta tarefa. EL usa Javascript para enviar mensagens aos servidores da Wikimedia de forma assíncrona quando o usuário realiza ações específicas. Nesta tarefa irei analisar um subconjunto de nosso registro de eventos.
-
-
-### Dados
-
-O conjunto de dados vem de uma estratégia de EL usada para avaliar a satisfação do usuário. Usuários *standalone* são randomicamente coletados para ser anonimamente rastreados por tal estratégia, que usa um sistema de descoberta do tipo *I'm alive* para estimar quanto tempo os usuários permanecem nas páginas que eles visitam. O conjunto de dados contém em tabela pouco mais de uma semana de EL com as seguintes colunas.
-
-| Campo              | Tipo    | Descrição                                                                         |
-|--------------------|---------|-----------------------------------------------------------------------------------|
-| `uuid`             | string  | Identificador universal único (UUID) para gerenciamento dos registros.            |
-| `timestamp`        | integer | Data e hora (UTC) do evento com a seguinte formatação: YYYYMMDDhhmmss.            |
-| `session_id`       | string  | Um identificador individual de sessão único.                                      |
-| `group`            | string  | Uma marca ("a" ou "b").                                                           |
-| `action`           | string  | Identifica a natureza do evento em que foi criado. Veja abaixo.                   |
-| `checkin`          | integer | Quantos segundos a página passou aberta.                                          |
-| `page_id`          | string  | Um identificador único relacionado às páginas visitadas e verificadas.            |
-| `n_results`        | integer | Número de sugestões de páginas retornado. Apenas para eventos searchResultPage.   |
-| `result_position`  | integer | A posição do link na SERP (Search Engine Results Page) para a página visitada.    |
-
-
-O campo `action` pode ter os seguintes valores:
+| Campo           | Tipo     | Descrição                                                                                           |
+|-----------------|----------|-----------------------------------------------------------------------------------------------------|
+| `score`         | float    | Pontuação média da avaliação do docente: (1) muito insatisfatório - (5) excelente.                  |
+| `rank`          | category | Nível do professor: horista (teaching), assistente (tenure track), titular (tenured).               |
+| `ethnicity`     | category | etnia do professor: não-minoria, minoria.                                                           |
+| `gender`        | category | Sexo do professor: feminino, masculino.                                                             |
+| `language`      | category | Língua da universidade frequentada pelo professor: inglês ou não-inglês.                            |
+| `age`           | integer  | Idade do professor.                                                                                 |
+| `cls_perc_eval` | float    | Percentual de alunos na turma que completaram a avaliação.                                          |
+| `cls_did_eval`  | integer  | Número de alunos na turma que completaram a avaliação.                                              |
+| `cls_students`  | integer  | Número total de alunos da turma.                                                                    |
+| `cls_level`     | category | Nível da disciplina: introdutório, avançado.                                                        |
+| `cls_profs`     | category | Número de professores ministrando módulos na disciplina dentro da amostra: único, múltiplos.        |
+| `cls_credits`   | category | Número de créditos da disciplina: um crédito, múltiplos créditos.                                   |
+| `bty_f1lower`   | float    | Avaliação de beleza do professor por aluna nível inicial: (1) mais baixo - (10) mais alto.          |
+| `bty_f1upper`   | float    | Avaliação de beleza do professor por aluna nível avançado: (1) mais baixo - (10) mais alto.         |
+| `bty_f2upper`   | float    | Avaliação de beleza do professor por segunda aluna nível avançado: (1) mais baixo - (10) mais alto. |
+| `bty_m1lower`   | float    | Avaliação de beleza do professor por aluno nível inicial: (1) mais baixo - (10) mais alto.          |
+| `bty_m1upper`   | float    | Avaliação de beleza do professor por aluno nível avançado: (1) mais baixo - (10) mais alto.         |
+| `bty_m2upper`   | float    | Avaliação de beleza do professor por segundo aluno nível avançado: (1) mais baixo - (10) mais alto. |
+| `bty_avg`       | float    | Média da avaliação de beleza do professor.                                                          |
+| `pic_outfit`    | category | Roupa do professore na foto avaliada: informal, formal.                                             |
+| `pic_color`     | category | Cor da foto avaliada: colorida, preto e branco.                                                     |
 
 
-* `searchResultPage`: quando uma nova busca é realizada e uma SERP é apresentado ao usuário.
+### O que vou fazer?
 
-* `visitPage`: quando o usuário clica em um *link* dos resultados.
-
-* `checkin`: quando o usuário permaneceu em uma página por um intervalo de tempo pré-definido.
+O objetivo aqui é criar um relatório analisando a correlação entre o "score" do professor e sua aparência física. Para isto, precisamos usar técnicas de regressão para analisar a influência de alguns dos fatores presentes nos dados.
 
 
-### O que vamos fazer?
+ - **1**. Vou começar com uma regressão simples para medir a correlação entre `score` (avaliação em si) e `bty_avg` (avaliação da aparência do professor).
 
-O objetivo aqui é criar um relatório analizando a correlação entre o score do professor e sua aparência física. Para isto, precisamos usar técnicas de regressão para analisar a influência de alguns dos fatores presentes nos dados.
-
-
- - **1**. Vou começar com uma regressão simples para medir a correlação entre *score* (avaliação em si) e *bty_avg* (avaliação da aparência do professor).
-
- - **2**. Aqui vou deixar de lado a variável *bty_avg* (beleza) e tentar medir a correlação entre *score* e quatro fatores que julgo possam ser relevantes na direção do requisito beleza física: *cls_level* (nível da disciplina), *age* (idade), *ethnicity* (perfil étnico miniritário ou não) e *gender* (homem ou mulher). À princípio faço quatro regressões simples separadas e observo a correlação entre *score* e cada uma das variáveis. Em seguida comparo com um modelo multivariado envolvendo todas as quatro variáveis. A pergunta que quero responder aqui é: Estes quatro fatores tem mais influência em *score* que *bty_avg* (beleza)?
+ - **2**. Aqui faremos algo mais elaborado. A ideia é propor um modelo que explique o comportamento de `score` não apenas usando `bty_avg` (beleza), mas também outros fatores relacionados à aparência física do professor ou que possam influenciar nas avaliações. Proponho medir a correlação segundo o modelo `score` ~ `bty_avg` + X, sendo X = {`age`,`gender`,`cls_perc_eval`,`cls_students`}.
  
 
 ### Mais sobre os dados
 
-Aqui vou apenas observar a "aparência" dos dados. 
+```{r}
+
+evals = evals %>% filter(cls_perc_eval < 100)
+
+
+evals151_ = evals %>% filter(cls_students > 150)
+
+
+evals0_150 = evals %>% filter(cls_students <= 150)
+
+```
+
+Primeiramente, com o intuito de equilibrar nossos dados, separei a amostra em duas, um de cursos com mais de 150 alunos e outra com os demais. Isto foi feito por entender que se tratam de modalidades muito diferentes de educação e, por isto, devem ser tratadas separadamente. Em seguida eliminei cursos onde cem por cento dos alunos responderam o questionário, por acreditar que forçar o aluno a responder pode gerar uma falta de comprometimento com as respostas.
+
+As análises se deram na amostra com até 150 alunos, por ainda ser a modalidade principal de educação. Apenas os resultados finais faram uma comparação entre ambas.
+
+Agora vou apenas observar a "aparência" dos dados. 
 
 ```{r}
 
-evals %>% 
+evals0_150 %>% 
   ggplot(aes(x = score)) + 
   geom_histogram(bins = 15, fill = paleta[1], colour = 'white') + 
     labs(x='Avaliação',  
@@ -116,7 +130,7 @@ evals %>%
         legend.position="none",
         panel.border=element_blank())
 
-evals %>% 
+evals0_150 %>% 
   ggplot(aes(x = bty_avg)) + 
   geom_histogram(bins = 15, fill = paleta[3], colour = 'white') + 
     labs(x='bty_avg',  
@@ -135,12 +149,12 @@ evals %>%
 
 ```
 
-A principio, a correlação entre beleza e avaliação do professor parece bem tênue.
+Abaixo podemos ver que a correlação entre beleza e avaliação do professor parece bem tênue.
 
 ```{r}
 
 
-evals %>% 
+evals0_150 %>% 
   ggplot(aes(x = score, y = bty_avg)) + 
   geom_point() + 
     labs(x='Avaliação',  
@@ -163,15 +177,15 @@ Agora observe a distribuição das outras quatro variáveis e sua correlação c
 
 ```{r}
 
-evals %>% 
-  ggplot(aes(x = cls_level)) + 
-  geom_bar(fill = paleta[1], colour = 'white') + 
-    labs(x='Avaliação',  
+d1<-evals0_150 %>% 
+  ggplot(aes(x = cls_students)) + 
+  geom_histogram(bins = 15,fill = paleta[1], colour = 'white') + 
+    labs(x='Total de estudantes',  
         y="Densidade", 
-        title="Densidade da Distribuição do Score dos Docentes", 
-        subtitle="(score, density)", 
-        caption="Universidade do Texas em Austin") +
-    theme(plot.title = element_text(face="bold",size = "15"),
+        title="Densidade por Total de Alunos", 
+        subtitle="(cls_students, density)", 
+        caption="Universidade do Texas") +
+    theme(plot.title = element_text(face="bold",size = "12"),
         plot.subtitle = element_text(size = "10"),
         plot.caption = element_text(size="10"),
         axis.title.y = element_text(size="12"),
@@ -180,15 +194,15 @@ evals %>%
         legend.position="none",
         panel.border=element_blank())
 
-evals %>% 
+d2<-evals0_150 %>% 
   ggplot(aes(x = age)) + 
   geom_histogram(bins = 15, fill = paleta[3], colour = 'white') + 
-    labs(x='bty_avg',  
+    labs(x='Idade',  
         y="Densidade", 
-        title="Densidade da Distribuição de Beleza Física dos Docentes", 
-        subtitle="(bty_avg, density)", 
-        caption="Universidade do Texas em Austin") +
-    theme(plot.title = element_text(face="bold",size = "15"),
+        title="Densidade por Idade", 
+        subtitle="(age, density)", 
+        caption="Universidade do Texas") +
+    theme(plot.title = element_text(face="bold",size = "12"),
         plot.subtitle = element_text(size = "10"),
         plot.caption = element_text(size="10"),
         axis.title.y = element_text(size="12"),
@@ -197,15 +211,15 @@ evals %>%
         legend.position="none",
         panel.border=element_blank())
 
-evals %>% 
-  ggplot(aes(x = ethnicity)) + 
-  geom_bar(fill = paleta[3], colour = 'white') + 
-    labs(x='bty_avg',  
+d3<-evals0_150 %>% 
+  ggplot(aes(x = cls_perc_eval)) + 
+  geom_histogram(bins = 15, fill = paleta[4], colour = 'white') + 
+    labs(x='Percentual de respostas',  
         y="Densidade", 
-        title="Densidade da Distribuição de Beleza Física dos Docentes", 
-        subtitle="(bty_avg, density)", 
-        caption="Universidade do Texas em Austin") +
-    theme(plot.title = element_text(face="bold",size = "15"),
+        title="Densidade por % de Respostas", 
+        subtitle="(cls_perc_eval, density)", 
+        caption="Universidade do Texas") +
+    theme(plot.title = element_text(face="bold",size = "12"),
         plot.subtitle = element_text(size = "10"),
         plot.caption = element_text(size="10"),
         axis.title.y = element_text(size="12"),
@@ -214,15 +228,55 @@ evals %>%
         legend.position="none",
         panel.border=element_blank())
 
-evals %>% 
+d4<-evals0_150 %>% 
   ggplot(aes(x = gender)) + 
-  geom_bar(fill = paleta[3], colour = 'white') + 
-    labs(x='bty_avg',  
+  geom_bar(fill = paleta[5], colour = 'white') + 
+    labs(x='Gênero',  
         y="Densidade", 
-        title="Densidade da Distribuição de Beleza Física dos Docentes", 
-        subtitle="(bty_avg, density)", 
+        title="Densidade por Gênero", 
+        subtitle="(gender, density)", 
         caption="Universidade do Texas em Austin") +
-    theme(plot.title = element_text(face="bold",size = "15"),
+    theme(plot.title = element_text(face="bold",size = "12"),
+        plot.subtitle = element_text(size = "10"),
+        plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        legend.position="none",
+        panel.border=element_blank())
+
+grid.arrange(arrangeGrob(d1,d2,ncol=2,widths=c(1,1)),
+    arrangeGrob(d3,d4,ncol=2,widths=c(1,1)),
+    heights=c(1,1))
+
+
+
+p1<-evals0_150 %>% 
+  ggplot(aes(y = score, x = cls_students)) + 
+  geom_point(alpha = .3) + 
+    labs(y='Avaliação',  
+        x="Total de estudantes", 
+        title="Total de estudantes X Avaliação", 
+        subtitle="(cls_students, score)", caption="Universidade do Texas"
+        ) +
+    theme(plot.title = element_text(face="bold",size = "12"),
+        plot.subtitle = element_text(size = "10"),
+        plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        legend.position="none",
+        panel.border=element_blank())
+
+p2<-evals0_150 %>% 
+  ggplot(aes(y = score, x = age)) + 
+  geom_point(alpha = .3) + 
+    labs(y='Avaliação',  
+        x="Idade", 
+        title="Idade X Avaliação", 
+        subtitle="(age, score)", caption="Universidade do Texas"
+        ) +
+    theme(plot.title = element_text(face="bold",size = "12"),
         plot.subtitle = element_text(size = "10"),
         plot.caption = element_text(size="10"),
         axis.title.y = element_text(size="12"),
@@ -232,34 +286,34 @@ evals %>%
         panel.border=element_blank())
 
 
-evals %>% 
+p3<-evals0_150 %>% 
+  ggplot(aes(y = score, x = cls_perc_eval)) + 
+  geom_point(alpha = .3) + 
+    labs(y='Avaliação',  
+        x="Percentual de respostas", 
+        title="% de respostas X Avaliação", 
+        subtitle="(cls_perc_eval, score)", caption="Universidade do Texas"
+        ) +
+    theme(plot.title = element_text(face="bold",size = "12"),
+        plot.subtitle = element_text(size = "10"),
+        plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        legend.position="none",
+        panel.border=element_blank())
+
+
+p4<-evals0_150 %>% 
   ggplot(aes(y = score, x = gender)) + 
   geom_jitter(width = .1, alpha = .3) + 
-    labs(x='Avaliação',  
-        y="Beleza", 
-        title="Avaliação X Beleza física", 
-        subtitle="(score, bty_avg)", 
-        caption="Universidade do Texas em Austin") +
-    theme(plot.title = element_text(face="bold",size = "15"),
-        plot.subtitle = element_text(size = "10"),
-        plot.caption = element_text(size="10"),
-        axis.title.y = element_text(size="12"),
-        axis.text.x = element_text(size="10"),
-        axis.text.y = element_text(size="12"),
-        legend.position="none",
-        panel.border=element_blank())
-
-
-evals %>% 
-  ggplot(aes(y = score, x = ethnicity)) + 
-  geom_jitter(width = .1, alpha = .3) + 
   geom_boxplot(outlier.alpha = .0) + 
-    labs(x='Avaliação',  
-        y="Beleza", 
-        title="Avaliação X Beleza física", 
-        subtitle="(score, bty_avg)", 
-        caption="Universidade do Texas em Austin") +
-    theme(plot.title = element_text(face="bold",size = "15"),
+    labs(y='Avaliação',  
+        x="Gênero", 
+        title="Gênero X Avaliação", 
+        subtitle="(gender, score)", caption="Universidade do Texas"
+        ) +
+    theme(plot.title = element_text(face="bold",size = "12"),
         plot.subtitle = element_text(size = "10"),
         plot.caption = element_text(size="10"),
         axis.title.y = element_text(size="12"),
@@ -268,567 +322,300 @@ evals %>%
         legend.position="none",
         panel.border=element_blank())
 
-
-evals %>% 
-  ggplot(aes(y = score, x = cls_level)) + 
-  geom_jitter(width = .1, alpha = .3) + 
-    labs(x='Avaliação',  
-        y="Beleza", 
-        title="Avaliação X Beleza física", 
-        subtitle="(score, bty_avg)", 
-        caption="Universidade do Texas em Austin") +
-    theme(plot.title = element_text(face="bold",size = "15"),
-        plot.subtitle = element_text(size = "10"),
-        plot.caption = element_text(size="10"),
-        axis.title.y = element_text(size="12"),
-        axis.text.x = element_text(size="10"),
-        axis.text.y = element_text(size="12"),
-        legend.position="none",
-        panel.border=element_blank())
-
-evals %>% 
-  ggplot(aes(y = score, x = age)) + 
-  geom_point() + 
-    labs(x='Avaliação',  
-        y="Beleza", 
-        title="Avaliação X Beleza física", 
-        subtitle="(score, bty_avg)", 
-        caption="Universidade do Texas em Austin") +
-    theme(plot.title = element_text(face="bold",size = "15"),
-        plot.subtitle = element_text(size = "10"),
-        plot.caption = element_text(size="10"),
-        axis.title.y = element_text(size="12"),
-        axis.text.x = element_text(size="10"),
-        axis.text.y = element_text(size="12"),
-        legend.position="none",
-        panel.border=element_blank())
-
-```
-
-
-
-| Campo                      | Tipo    | Descrição                                                             |
-|----------------------------|---------|-----------------------------------------------------------------------|
-| `search_index`             | integer | Um contator que marca cada uma das buscas em uma sessão               |
-| `session_start_timestamp`  | integer | Data e hora de início da sessão correspondente                        |
-| `day`                      | date    | Data da sessão correspondente                                         |
-| `session_legth`            | integer | Duração da sessão contada em segundos                                 |
-| `last_search`              | integer | Última busca realizada na sessão (ultimo `search_index`)              |
-| `group`                    | string  | Uma marca de grupo ("a" e "b")                                        |
-| `results`                  | integer | Número de resultados da busca                                         |
-| `num_clicks`               | integer | Número de páginas acessadas na busca                                  |
-| `first_click`              | integer | Posição do primeiro click                                             |
-
-
-# Questões
-
-
-### Q1. Qual é a *clickthrough rate* geral diária? Como isto varia entre os grupos?
-
-Algo crucial para começarmos a responder esta questão é calcular a taxa de cliques por sessão de busca. Como a taxa é por sessão, agrupar os dados desta forma é um bom primeiro passo. Enquanto ocorre este agrupamento criamos duas novas variáveis que ajudaram na tarefa de analisar a taxa de cliques: `visited` para identificar facilmente qual sessão teve ou não cliques (1 ou 0) e `first_search_zero` que marca aquelas sessões cuja primeira busca não trouxe resultados. `results` e `num_clicks` soma as variáveis originais de mesmo nome, agrupando por sessão.
-
-```{r}
-sessions = buscas %>% #agrupando por sessão
-    group_by(group, day, session_id) %>% 
-    summarise(visited = ifelse(sum(num_clicks) > 0, 1, 0),
-              session_legth = first(session_legth),
-              last_search = first(last_search),
-              results = sum(results, na.rm = TRUE),
-              num_clicks = sum(num_clicks, na.rm = TRUE), 
-              first_search_zero = ifelse(first(results)==0, "Sim", "Não"))
-```
-
-Aqui, partindo da premissa que os dados em questão dizm respeito a uma amostra e utilizando o método de *bootstrap*, podemos estimar a distribuição amosral da média da variável `visited`.
-
-```{r}
-
-funcao_bootstrap1 <- function(dado, indices){
-    d = dado %>% 
-      slice(indices) %>% 
-      group_by(group) %>% 
-      summarise(click_through = mean(visited)) %>% 
-      pull(click_through)   
-    return(mean(d[1]))
-}
-
-funcao_bootstrap2 <- function(dado, indices){
-    d = dado %>% 
-      slice(indices) %>% 
-      group_by(group,day) %>% 
-      summarise(click_through = mean(visited)) %>% 
-      pull(click_through)   
-    return(mean(d[2]))
-}
-
-bootstraps1 <- boot(data = sessions, 
-                   statistic = funcao_bootstrap1, # <- referência para a função 
-                   R = 200) # número de bootstraps
-
-
-bootstraps2 <- boot(data = sessions, 
-                   statistic = funcao_bootstrap2, # <- referência para a função 
-                   R = 200) # número de bootstraps
-
-
-
-p1 <- tibble(estatistica = as.double(bootstraps1$t)) %>% 
-  ggplot(aes(x = estatistica)) + 
-  geom_histogram(binwidth = .0005, fill = "white", color="blue")
-
-
-
-p2 <- tibble(estatistica = as.double(bootstraps2$t)) %>% 
-  ggplot(aes(x = estatistica)) + 
-  geom_histogram(binwidth = .0005, fill = "white", color="pink")
-
-grid.arrange(arrangeGrob(p2,ncol=1,widths=c(1)),
-    arrangeGrob(p1,ncol=1,widths=c(1)),
+grid.arrange(arrangeGrob(p1,p2,ncol=2,widths=c(1,1)),
+    arrangeGrob(p3,p4,ncol=2,widths=c(1,1)),
     heights=c(1,1))
 
 ```
 
-```{r}
+Perceba que separadamente não fica clara uma correlação de cada fator com a avaliação do professor. Buscarei detalhes deste relacionamento com base nas técnicas de regressão estudadas.
 
+# A análise
 
-funcao_bootstrap_0301 <- function(dado, indices){
-    d = dado %>% 
-      slice(indices) %>% 
-      filter(format(day, "%m-%d") == '03-01') %>%
-      group_by(group) %>% 
-      summarise(click_through = mean(visited)) %>% 
-      pull(click_through)   
-    return(d[1] - d[2])
-}
+### 1. Vou começar com uma regressão linear simples para medir a correlação entre `score` (avaliação em si) e `bty_avg` (avaliação da aparência do professor).
 
-funcao_bootstrap_0302 <- function(dado, indices){
-    d = dado %>% 
-      slice(indices) %>% 
-      filter(format(day, "%m-%d") == '03-02') %>%
-      group_by(group) %>% 
-      summarise(click_through = mean(visited)) %>% 
-      pull(click_through)   
-    return(d[1] - d[2])
-}
-
-funcao_bootstrap_0303 <- function(dado, indices){
-    d = dado %>% 
-      slice(indices) %>% 
-      filter(format(day, "%m-%d") == '03-03') %>%
-      group_by(group) %>% 
-      summarise(click_through = mean(visited)) %>% 
-      pull(click_through)   
-    return(d[1] - d[2])
-}
-
-funcao_bootstrap_0304 <- function(dado, indices){
-    d = dado %>% 
-      slice(indices) %>% 
-      filter(format(day, "%m-%d") == '03-04') %>%
-      group_by(group) %>% 
-      summarise(click_through = mean(visited)) %>% 
-      pull(click_through)   
-    return(d[1] - d[2])
-}
-
-funcao_bootstrap_0305 <- function(dado, indices){
-    d = dado %>% 
-      slice(indices) %>% 
-      filter(format(day, "%m-%d") == '03-05') %>%
-      group_by(group) %>% 
-      summarise(click_through = mean(visited)) %>% 
-      pull(click_through)   
-    return(d[1] - d[2])
-}
-
-funcao_bootstrap_0306 <- function(dado, indices){
-    d = dado %>% 
-      slice(indices) %>% 
-      filter(format(day, "%m-%d") == '03-06') %>%
-      group_by(group) %>% 
-      summarise(click_through = mean(visited)) %>% 
-      pull(click_through)   
-    return(d[1] - d[2])
-}
-
-funcao_bootstrap_0307 <- function(dado, indices){
-    d = dado %>% 
-      slice(indices) %>% 
-      filter(format(day, "%m-%d") == '03-07') %>%
-      group_by(group) %>% 
-      summarise(click_through = mean(visited)) %>% 
-      pull(click_through)   
-    return(d[1] - d[2])
-}
-
-funcao_bootstrap_0308 <- function(dado, indices){
-    d = dado %>% 
-      slice(indices) %>% 
-      filter(format(day, "%m-%d") == '03-08') %>%
-      group_by(group) %>% 
-      summarise(click_through = mean(visited)) %>% 
-      pull(click_through)   
-    return(d[1] - d[2])
-}
-
-bootstraps3 <- boot(data = sessions, 
-                   statistic = funcao_bootstrap_0301, # <- referência para a função 
-                   R = 200) # número de bootstraps
-
-glimpse(bootstraps3$t)
-
-tibble(estatistica = as.double(bootstraps3$t)) %>% 
-  ggplot(aes(x = estatistica)) + 
-  geom_histogram(binwidth = .0005, fill = "white", color="green")
-
-boot.ci(bootstraps3, conf = 0.95, type = "basic")
-
-
-
-```
-
-
-
-Partindo para a prática usaremos um *Stepped Line*, que é um tipo de gráfico que reuni características de gráfico de linha e histograma. Trata-se de um gráfico de linha discreto, onde o eixo horizontal representa o tempo (em dias) e o eixo vertical exibe uma proporção calculada dividindo o total de sessões com buscas úteis (com acesso a alguns dos links retornados) pelo total de sessões.
+A pergunta a ser respondida aqui é: Qual a correlação entre a aparência física do professor e sua avaliação pelos alunos. Lembrando que dividimos nossa base em cursos com mais de 150 alunos e cursos com menos de 150 alunos.
 
 ```{r}
-sessions %>% 
-    group_by(group, day) %>% 
-    summarise(proportion = sum(visited == 1)/n()) %>% 
-        ggplot(aes(x = day, y = proportion, color = group)) + 
-        geom_step() + 
-    labs(x='Dias',  
-        y="'clickthrough rate'", 
-        title="Proporção Diária de 'clickthrough rate'", 
-        color='Grupos',
-        subtitle="(day, proportion)", 
-        caption="Wikimedia Foundation") +
-    theme(plot.title = element_text(face="bold",size = "17"),
-        plot.subtitle = element_text(size = "12"),
-        plot.caption = element_text(size="12"),
-        axis.title.x = element_text(size ="15"),
-        axis.title.y = element_text(size="15"),
-        axis.text.x = element_text(size="12"),
-        axis.text.y = element_text(size="12"),
-        legend.position="top",
-        panel.border=element_blank())
+
+modelo1 = lm(score ~ bty_avg, data = evals0_150)
+
+modelo1b = lm(score ~ bty_avg, data = evals151_)
+
+```
+```{r}
+
+tidy(modelo1, conf.int = TRUE, conf.level = 0.95)
+
+glance(modelo1)
+
+tidy(modelo1b, conf.int = TRUE, conf.level = 0.95)
+
+glance(modelo1b)
+
 ```
 
-Observe que as proporções são bem baixas, sobretudo no grupo "b". Isto indica que existe alguma característica no grupo "a" que estimula o sucesso da busca. Porém, a taxa de sucesso é muito baixa em ambos os grupos.
-
-Observe o que ocorre se observarmos apenas sessões com nenhum resultado de busca (gráfico abaixo). Perceba que há buscas vazias com acesso a resultados, o que a priori parece um contrassenso. Porém, buscas vazias em uma mesma sessão podem ser ecos de buscas anteriores (paginação de resultados, por exemplo).
-
-Observe que a dispersão destes resultados é bastante heterogênea e o volume é pequeno, possíveis sinais de que tratam-se de *outliers*.
+Para visualizar os modelos:
 
 ```{r}
-sessions %>% 
-    group_by(group, day) %>% 
-    summarise(proportion = sum(visited == 1 & results == 0)/n()) %>% 
-        ggplot(aes(x = day, y = proportion, color = group)) + 
-        geom_step() + 
-    labs(x='Dias',  
-        y="'clickthrough rate' (sem buscas vazias)", 
-        title="Proporção Diária de 'clickthrough rate'", 
-        color='Grupos',
-        subtitle="(day, proportion)", 
-        caption="Wikimedia Foundation") +
-    theme(plot.title = element_text(face="bold",size = "17"),
-        plot.subtitle = element_text(size = "12"),
-        plot.caption = element_text(size="12"),
-        axis.title.x = element_text(size ="15"),
-        axis.title.y = element_text(size="15"),
-        axis.text.x = element_text(size="12"),
+
+evals_augmented = evals0_150 %>% 
+  add_predictions(modelo1) 
+
+evals_augmented %>% 
+  ggplot(aes(x = bty_avg)) + 
+  geom_line(aes(y = pred), colour = "brown") + 
+  geom_point(aes(y = score))+ 
+    labs(x='Beleza',  
+        y="Avaliação", 
+        title="Correlação entre beleza e competência do docente", 
+        subtitle="(bty_avg, score) | cls_students <= 150", 
+        caption="Universidade do Texas") +
+    theme(plot.title = element_text(face="bold",size = "15"),
+        plot.subtitle = element_text(size = "10"),
+        plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
         axis.text.y = element_text(size="12"),
-        legend.position="top",
+        legend.position="none",
         panel.border=element_blank())
+
+evals_augmented = evals0_150 %>% 
+  add_predictions(modelo1b) 
+
+evals_augmented %>% 
+  ggplot(aes(x = bty_avg)) + 
+  geom_line(aes(y = pred), colour = "brown") + 
+  geom_point(aes(y = score))+ 
+    labs(x='Beleza',  
+        y="Avaliação", 
+        title="Correlação entre beleza e competência do docente", 
+        subtitle="(bty_avg, score) | cls_students > 150", 
+        caption="Universidade do Texas") +
+    theme(plot.title = element_text(face="bold",size = "15"),
+        plot.subtitle = element_text(size = "10"),
+        plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
+        axis.text.x = element_text(size="10"),
+        axis.text.y = element_text(size="12"),
+        legend.position="none",
+        panel.border=element_blank())
+
 ```
 
-Se incluirmos apenas sessões com uma única busca e zero resultados, o que vemos evidencia ainda mais a hipótese de *outliers*. Diferente do que se esperava, ainda é possível visualizar resultados no gráfico (veja abaixo), e na mesma proporção (baixa). Isto argumenta contra a hipótese de que buscas vazias e com visitas sejam ecos de buscas anteriores.
+Se considerarmos que temos apenas uma amostra de nosso universo de avaliações dissentes de fim de período, o que podemos inferir a partir desse modelo sobre a relação entre a aparência física do professor e sua avaliação pelo aluno? 
+
+> Aqui utilizei regressão linear simples para analisar se `score` tem uma correlação significativa com `bty_avg`. Os resultados indicam que o modelo com 1 preditor segundo o formato `score` = A + B.`bty_avg` explica 2,15% da variância da variável resposta (R2 = 0.0215) para nossa amostra de cursos com 150 alunos ou menos. Já nossa amostra com mais de 150 alunos, o mesmo modelo explica 56,57% da variação da variável resposta (R2 = 0.5657). Na amostra de cursos com até 150 alunos `bty_avg`, a beleza física do professor percebida pelos alunos, tem uma relação significativa com `score` (avaliação do professor), a mais de 97% e com IC em [0.0178,0.0858], porém de muito baixa magnitude. Já na amostra com mais de 150 alunos por curso, a mesma variável tem relação significativa com a variável resposta, à mais de 99% e com IC em [0.2497,0.4988], o que representa uma magnitude significativa levando em conta o domínio da variável de resposta `score` (0 a 5). O aumento de 1 unidade de `bty_avg` produz uma mudança de 0,052 em `score` na amostra com até 150 alunos por curso, o que corresponde, como mais de 97% de confiança, em um aumento entre 0,0178 e 0,0858 na população. Já na amostra com mais de 150 alunos por curso, o aumento de 1 unidade em `bty_avg` produz uma mudança de 0,374 na em `score` na amostra, o que corresponde, com mais de 99% de confiança, em um aumento entre 0,2497 e 0,4988 na população original.
+
+O que podemos concluir sobre a correlação entre estas duas variáveis nas duas amostras que separamos (e não população, com certa confiança)?
+
+> Com base no que foi observado é possível tirar duas conclusões, cada uma relacionada a sua amostra. Na amostra de cursos com até 150 alunos, apesar da alta significância dos resultados, a magnitude da correlação foi muito baixa, o que pode significar um nível mais elevado de comprometimento dos alunos para com a avaliação. Já na amostra de cursos com mais de 150 alunos, também com alta significância, percebemos que a magnitude da influência da beleza física na avaliação dos alunos é muito elevada levando o domínio de `score` em consideração [0,00;5,00].
+> Com base nos resultados, temos boas evidências que argumentam a favor de um nível de comprometimento mais elevado dos estudantes em cursos com menos alunos.
+
+
+### 2. Aqui faremos algo mais elaborado. A ideia é propor um modelo que explique o comportamento de `score` não apenas usando `bty_avg` (beleza), mas também outros fatores relacionados à aparência física do professor ou motivos que possam influenciar as avaliações. Proponho medir a correlação entre `score` ~ `bty_avg` + X, sendo X = {`age`,`gender`,`cls_perc_eval`,`cls_students`}.
+
+Da analise anterior trazemos uma boa noção de como a beleza do professor influencia sua avaliação em cursos com mais e menos alunos. Agora podemos testar mais variáveis criando um modelo de regressão linear múltipla que descreva melhor estas relações.
+
+`age` e `gender` são fatores que, de modo mais óbvio, estão relacionados a beleza física do professor na votação por parte dos alunos. Espero que `age` colabore de forma crescente com o `score` do professor, já `gender`, uma variável categórica, também deve ter relevância significativa. Finalmente, `cls_perc_eval` e `cls_students`, que tratam de questões mais relacionadas a motivos para falta de atenção, representam uma hipótese mais difícil de interpretar, mas creio que tenham fatores crescentes. Uma associação entre estas variáveis e `bty_avg` para descrever `score` seria um modelo melhor que o da análise anterior?
+
+Particularmente, começarei fazendo quatro regressões múltiplas separadas, cada uma envolvendo `bty_avg` e um elemento de **X**, e observo a correlação existente com `score` em cada um dos quatro modelos apenas no contexto da amostra de até 150 alunos. Em seguida observo o comportamento das correlações um novo modelo multivariado, agora envolvendo todas as quatro variáveis e `bty_avg` e comparando os resultados nas duas amostras (<=150 e >150). A pergunta que quero responder aqui é: **Estes quatro fatores têm mais influência em `score` que `bty_avg` isoladamente?**
 
 ```{r}
-sessions %>% 
-    group_by(group, day) %>% 
-    summarise(proportion = sum(visited == 1 & last_search == 1 & results == 0)/n()) %>% 
-        ggplot(aes(x = day, y = proportion, color = group)) + 
-        geom_step() + 
-    labs(x='Dias',  
-        y="'clickthrough rate'", 
-        title="Proporção Diária de 'clickthrough rate'", 
-        color='Grupos',
-        subtitle="(day, proportion)", 
-        caption="Wikimedia Foundation") +
-    theme(plot.title = element_text(face="bold",size = "17"),
-        plot.subtitle = element_text(size = "12"),
-        plot.caption = element_text(size="12"),
-        axis.title.x = element_text(size ="15"),
-        axis.title.y = element_text(size="15"),
-        axis.text.x = element_text(size="12"),
-        axis.text.y = element_text(size="12"),
-        legend.position="top",
-        panel.border=element_blank())
+
+modelo2 = lm(score ~ bty_avg + cls_students, data = evals0_150 )
+modelo3 = lm(score ~ bty_avg + age, data = evals0_150)
+modelo4 = lm(score ~ bty_avg + cls_perc_eval, data = evals0_150)
+modelo5 = lm(score ~ bty_avg + gender, data = evals0_150)
+
+```
+```{r}
+
+tidy(modelo2, conf.int = TRUE, conf.level = 0.95)
+glance(modelo2)
+
+tidy(modelo3, conf.int = TRUE, conf.level = 0.95)
+glance(modelo3)
+
+tidy(modelo4, conf.int = TRUE, conf.level = 0.95)
+glance(modelo4)
+
+tidy(modelo5, conf.int = TRUE, conf.level = 0.95)
+glance(modelo5)
+
 ```
 
-De fato, não temos total clareza a respeito do que tratam os dados. A variável `group` traz as marcas "a" e "b" que são um tanto obscuras levando em consideração apenas a descrição da tarefa oferecida pela Fundação Wikimedia.
+Visualizar o modelo com muitas variáveis independentes fica mais difícil. Novamente testamos a correlação de certas variáveis com uma variável resposta `score` (acima). Aqui utilizamos sucessivas regressões lineares múltiplas para testar a correlação entre a variável resposta, `bty_avs` e as quatro variáveis de **X**. 
 
-Com base nas estratégias de filtragem propostas (`results` > 0) e distribuindo nossa proporção agora por dias de semana em um gráfico de barras (gráfico abaixo), observamos um aumento bastante sutil o acesso aos resultados de busca no meio da semana (terça a sexta) em relação ao fim de semana dentro do grupo "a", ao contrário do grupo "b", onde ocorre a tendência oposta (mais acessos de sexta a segunda).
+A princípio medimos a correlação entre `score`, `bty_avg` e cada variável de **X** separadamente na amostra de cursos com 150 alunos ou menos. Nosso intuito era estimar os R2 e comparar cada um deles com um modelo envolvendo todas as variáveis. Com isto, assim que testarmos o modelo completo, caso este seja melhor que os modelos atuais, teremos uma evidência de que não há fatores exercendo influências negativas na correlação com nossa variável resposta.
 
 ```{r}
-sessions %>% 
-    group_by(group, day) %>% 
-    arrange(day) %>%
-    summarise(proportion = sum(visited == 1 & results > 0)/n()) %>% 
-        ggplot(aes(x = format(day, "%m-%d %a"), y = proportion, color = group, fill=group)) + 
-        geom_col(position = "dodge") + 
-    labs(x='Dias da semana',  
-        y="'clickthrough rate'", 
-        title="Proporção Diária de 'clickthrough rate'", 
-        color='Grupos',
-        fill='Grupos',
-        subtitle="(day, proportion)", 
-        caption="Wikimedia Foundation") +
-    theme(plot.title = element_text(face="bold",size = "17"),
-        plot.subtitle = element_text(size = "12"),
-        plot.caption = element_text(size="12"),
-        axis.title.x = element_text(size ="15"),
-        axis.title.y = element_text(size="15"),
+
+para_plotar_modelo2 = evals0_150 %>% 
+  data_grid(
+            bty_avg = seq_range(bty_avg, 9),  
+            cls_students = seq_range(cls_students,3)) %>% 
+  add_predictions(modelo2)
+
+para_plotar_modelo3 = evals0_150 %>% 
+  data_grid(
+            bty_avg = seq_range(bty_avg, 9),  
+            age = seq_range(age, 3)) %>% 
+  add_predictions(modelo3)
+
+para_plotar_modelo4 = evals0_150 %>% 
+  data_grid(
+            bty_avg = seq_range(bty_avg, 9),  
+            cls_perc_eval = seq_range(cls_perc_eval, 3)) %>% 
+  add_predictions(modelo4)
+
+para_plotar_modelo5 = evals0_150 %>% 
+  add_predictions(modelo5)
+
+```
+
+```{r}
+
+p1<-para_plotar_modelo2 %>% 
+  ggplot(aes(x = bty_avg, y = pred)) + 
+  geom_line(aes(group = cls_students, colour = cls_students)) + 
+  geom_point(data = evals0_150, aes(y = score, colour = cls_students))+ 
+    labs(x=" ",  
+        y="Avaliação", 
+        title="Correlação entre Avaliação, Beleza do Professor e Total de Alunos", 
+        subtitle="(bty_avg, score)", 
+        colour="Nível do aluno",
+        caption=NULL) +
+    theme(plot.title = element_text(face="bold",size = "12"),
+        plot.subtitle = element_text(size = "10"),
+        #plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
         axis.text.x = element_text(size="10"),
         axis.text.y = element_text(size="12"),
-        legend.position="top",
+        legend.position="right",
         panel.border=element_blank())
-```
 
-### Q2. Quais resultados da busca (posições) as pessoas tendem a seguir primeiro? Como isto varia dia após dia?
-
-Para esta pergunta utilizaremos um gráfico de dispersão com um pequeno *jitter* para facilitar a visualização. Tal como na primeira questão, nossa intenção é visualizar a distribuição de uma variável (`first_click`) dia após dia. Aqui incluímos uma diferenciação por grupos apenas para enriquecer nossa análise.
-
-```{r message=FALSE, warning=FALSE}
-buscas %>% 
-    group_by(group, day) %>% 
-    ggplot(aes(x = format(day, "%m-%d %a"), y = first_click, color = group)) + 
-    geom_jitter(height = .05, width = .3, alpha = 0.3) + 
-    scale_y_log10()+
-    labs(x='Dias da semana',  
-        y="Primeiro Click", 
-        title="Posição do Primeiro Clique nos Resultados da Busca", 
-        color='Grupos',
-        subtitle="(day, first_click)", 
-        caption="Wikimedia Foundation") +
-    theme(plot.title = element_text(face="bold",size = "17"),
-        plot.subtitle = element_text(size = "12"),
-        plot.caption = element_text(size="12"),
-        axis.title.x = element_text(size ="15"),
-        axis.title.y = element_text(size="15"),
+p2<-para_plotar_modelo3 %>% 
+  ggplot(aes(x = bty_avg, y = pred)) + 
+  geom_line(aes(group = age, colour = age)) + 
+  geom_point(data = evals0_150, aes(y = score, colour = age))+ 
+    labs(x=" ",  
+        y="Avaliação", 
+        title=NULL, 
+        subtitle="(bty_avg, score)", 
+        colour="Idade",
+        caption=NULL) +
+    theme(plot.title = element_text(face="bold",size = "12"),
+        plot.subtitle = element_text(size = "10"),
+        #plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
         axis.text.x = element_text(size="10"),
         axis.text.y = element_text(size="12"),
-        legend.position="top",
+        legend.position="right",
         panel.border=element_blank())
-```
 
-Não é difícil prever que os primeiros resultados da busca receberam mais cliques (como o gráfico acima apresenta). Porém, a sexta-feira apresenta um padrão atípico, com um conjunto de buscas "desgarrado" das primeiras posições. Isto pode indicar a atividade de um robô de busca, algum processo agendado ou mesmo um padrão verdadeiro ligado ao início do fim de semana.
-
-Seguindo nossa estratégia de filtro de **Q1** (`results` > 0), percebemos que a tendência não se altera muito, veja:
-
-```{r message=FALSE, warning=FALSE}
-buscas %>% # neste caso a proporção de 1s diminui bastante
-    filter(results > 0) %>% 
-    group_by(group, day) %>% 
-    mutate(first_click[is.na(first_click)] <- 0) %>% 
-    ggplot(aes(x = format(day, "%m-%d %a"), y = first_click, color = group)) + 
-    geom_jitter(height = .05, width = .3, alpha = 0.3) + 
-    scale_y_log10()+
-    labs(x='Dias da semana',  
-        y="Primeiro Click", 
-        title="Posição do Primeiro Clique nos Resultados da Busca", 
-        color='Grupos',
-        subtitle="(day, first_click)", 
-        caption="Wikimedia Foundation") +
-    theme(plot.title = element_text(face="bold",size = "17"),
-        plot.subtitle = element_text(size = "12"),
-        plot.caption = element_text(size="12"),
-        axis.title.x = element_text(size ="15"),
-        axis.title.y = element_text(size="15"),
+p3<-para_plotar_modelo4 %>% 
+  ggplot(aes(x = bty_avg, y = pred)) + 
+  geom_line(aes(group = cls_perc_eval, colour = cls_perc_eval)) + 
+  geom_point(data = evals0_150, aes(y = score, colour = cls_perc_eval))+ 
+    labs(x=' ',  
+        y="Avaliação", 
+        title=NULL, 
+        subtitle="(bty_avg, score)", 
+        colour="% respondido",
+        caption=NULL) +
+    theme(#plot.title = element_text(face="bold",size = "12"),
+        plot.subtitle = element_text(size = "10"),
+        #plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
         axis.text.x = element_text(size="10"),
         axis.text.y = element_text(size="12"),
-        legend.position="top",
+        legend.position="right",
         panel.border=element_blank())
-```
 
-Uma alternativa para tentar equilibrar os resultados poderia ser eliminar todas as buscas que só tiveram um clique. Neste caso nosso questionamento mudaria um pouco. Ao invés de perguntar qual posição é mais clicada pelo usuário das buscas, estaríamos questionando: caso o usuário clique mais de uma vez, qual posição é mais clicada. Veja o gráfico abaixo.
-
-```{r message=FALSE, warning=FALSE}
-buscas %>% # neste caso a proporção de 1s diminui bastante
-    filter(num_clicks > 1) %>% 
-    group_by(group, day) %>% 
-    mutate(first_click[is.na(first_click)] <- 0) %>% 
-    ggplot(aes(x = format(day, "%m-%d %a"), y = first_click, color = group)) + 
-    geom_jitter(height = .05, width = .3, alpha = 0.3) + 
-    scale_y_log10()+
-    labs(x='Dias da semana',  
-        y="Primeiro Click", 
-        title="Posição do Primeiro Clique nos Resultados da Busca", 
-        color='Grupos',
-        subtitle="(day, first_click)", 
-        caption="Wikimedia Foundation") +
-    theme(plot.title = element_text(face="bold",size = "17"),
-        plot.subtitle = element_text(size = "12"),
-        plot.caption = element_text(size="12"),
-        axis.title.x = element_text(size ="15"),
-        axis.title.y = element_text(size="15"),
+p4<-para_plotar_modelo5 %>% 
+  ggplot(aes(x = bty_avg, y = pred)) + 
+  geom_line(aes(group = gender, colour = gender)) + 
+  geom_point(data = evals0_150, aes(y = score, colour = gender))+ 
+    labs(x='Beleza',  
+        y="Avaliação", 
+        title=NULL, 
+        subtitle="(bty_avg, score)", 
+        colour="Gênero",
+        caption="Universidade do Texas") +
+    theme(#plot.title = element_text(face="bold",size = "12"),
+        plot.subtitle = element_text(size = "10"),
+        plot.caption = element_text(size="10"),
+        axis.title.y = element_text(size="12"),
         axis.text.x = element_text(size="10"),
         axis.text.y = element_text(size="12"),
-        legend.position="top",
+        legend.position="right",
         panel.border=element_blank())
+
 ```
 
-Lamentavelmente, restou pouquíssimos casos atribuidos ao grupo "b". Mesmo assim, perceba que há um padrão muito mais claro aqui. A terça, a quarta e a quinta-feira, dias 01, 02 e 03 de Março, tem muito mais acessos que os demais dias na amostra. Como a terça-feira do dia 08 de Março não segue a mesma regra, é pouco provável que estejamos falando de um padrão que se repete semanalmente. Ou algo atípico ocorreu durante estes dias, ou a atividade de *logging* que gerou a amostra é tendenciosa para estes dias. Para tirar esta dúvida vamos apelar para um histograma a fim de observar a densidade da amostra para cada dia. 
+```{r echo=FALSE}
 
-```{r message=FALSE, warning=FALSE}
-buscas %>% # neste caso a proporção de 1s diminui bastante
-    group_by(day) %>% 
-    ggplot(aes(x = format(day, "%m-%d %a"))) + 
-    geom_bar(color = "darkcyan", fill = "darkcyan") + 
-    scale_y_log10()+
-    labs(x='Dias da semana',  
-        y="Desidade", 
-        title="Desidade da Amostra a cada Dia", 
-        color='Grupos',
-        subtitle="(day, density)", 
-        caption="Wikimedia Foundation") +
-    theme(plot.title = element_text(face="bold",size = "17"),
-        plot.subtitle = element_text(size = "12"),
-        plot.caption = element_text(size="12"),
-        axis.title.x = element_text(size ="15"),
-        axis.title.y = element_text(size="15"),
-        axis.text.x = element_text(size="10"),
-        axis.text.y = element_text(size="12"),
-        legend.position="top",
-        panel.border=element_blank())
+grid.arrange(arrangeGrob(p1,ncol=1,widths=c(1)),
+    arrangeGrob(p3,ncol=1,widths=c(1)),
+    heights=c(1,1))
+
+grid.arrange(arrangeGrob(p2,ncol=1,widths=c(1)),
+    arrangeGrob(p4,ncol=1,widths=c(1)),
+    heights=c(1,1))
+
 ```
 
-Veja que a amostra é bastante homogênea. Neste caso, podemos afirmar que o número de cliques em resultados de busca é bem maior nos três primeiros dias de nossa amostra, mas não na terça, quarta e quinta-feira repetidamente (a ultima terça feira não corresponde ao padrão).
+Agora o modelo completo: `score` ~ `bty_avg` + `cls_students` + `age` + `cls_perc_eval` + `gender`
 
-### Q3. Qual é a *zero results rate* geral diária? Como isto varia entre os grupos?
+```{r}
 
-A *zero results rate* geral diária representa o número de buscas que não retornaram resultados em um dado dia ou, descrevendo de modo mais intuitivo, as buscas que fracassaram. Podemos distribuir esta variável em um gráfico de colunas diárias. A cada dia é apresentada a taxa de fracassos em buscas para os grupos "a" e "b" usando colunas paralelas. Veja abaixo.
+modelo6 = lm(score ~ bty_avg + cls_students + age + cls_perc_eval + gender, data = evals0_150)
 
-```{r message=FALSE, warning=FALSE}
-buscas %>% # fracasso maior quase sempre em "a"
-    group_by(group, day) %>% 
-    summarise(proportion = sum(results == 0)/n()) %>% 
-    ggplot(aes(x = format(day, "%m-%d %a"), y = proportion, color = group, fill=group)) + 
-    geom_col(position = "dodge")+
-    labs(x='Dias',  
-        y="Fracasso", 
-        title="Proporção Diária de Fracasso em Buscas", 
-        color='Grupos',
-        fill='Grupos',
-        subtitle="(day, proportion)", 
-        caption="Wikimedia Foundation") +
-    theme(plot.title = element_text(face="bold",size = "17"),
-        plot.subtitle = element_text(size = "12"),
-        plot.caption = element_text(size="12"),
-        axis.title.x = element_text(size ="15"),
-        axis.title.y = element_text(size="15"),
-        axis.text.x = element_text(size="10"),
-        axis.text.y = element_text(size="12"),
-        legend.position="top",
-        panel.border=element_blank())
+modelo6b = lm(score ~ bty_avg + cls_students + age + cls_perc_eval + gender, data = evals151_)
+
+```
+```{r}
+
+tidy(modelo6, conf.int = TRUE, conf.level = 0.95)
+glance(modelo6)
+
+tidy(modelo6b, conf.int = TRUE, conf.level = 0.95)
+glance(modelo6b)
+
 ```
 
-Observe que, salvo nos dois ultimos dias, a taxa de *zero results rate* do grupo "a" praticamente inexiste, já nestes dias, por algum motivo, aproximam-se de 20%. Já para o grupo "b", este valor varia entre algo em torno de 17% e quase zero alternadamente.
+Para o modelo final, convertendo nossas variáveis em uma descrição textual: Queremos saber se a aparência física do professor aliada à sua idade e sexo exercem influência sobre a avaliação que os alunos fazem dele, além de descobrir se o tamanho da turma e a taxa de resposta à avaliação também se correlacionam  com sua pontuação.
 
-Reforçando o que foi identificado na análise até agora. Observando apenas buscas fracassadas (sem resultados) e com cliques, o gráfico abaixo mostra que o grupo "b" não apresenta este tipo de *outlier*, diferente de "a". Isto pode ser tomado como uma evidência da diferença funcional entre os dois grupos.
+Utilizando regressão linear múltipla, analisamos se há correlação significativa entre `score` e `bty_avg`, `age`, `gender`, `cls_perc_eval` e `cls_students` em ambas as amostras. Os resultados mostraram que mesmo o modelo com cinco preditores no formato `score` = B0 + Bn.X, sendo n=|X| explica apenas 8,14% (pouco, porém, melhor que qualquer um dos modelos anteriores com apenas um ou dois preditores) do comportamento da variável de resposta `score` na amostra de cursos com 150 alunos ou menos (R2=0.0814). Já para a amostra de cursos com mais de 150 alunos, este modelo descreve muito bem a variável resposta à quase 80% (R2=0,799).
 
-```{r message=FALSE, warning=FALSE}
-buscas %>% # fracasso maior quase sempre em "a"
-    group_by(group, day) %>% 
-    summarise(proportion = sum(results == 0 & num_clicks > 0)/n()) %>% 
-    ggplot(aes(x = format(day, "%m-%d %a"), y = proportion, color = group, fill=group)) + 
-    geom_col(position = "dodge")+
-    labs(x='Dias',  
-        y="Fracasso", 
-        title="Proporção Diária de Fracasso em Buscas", 
-        color='Grupos',
-        fill='Grupos',
-        subtitle="(day, proportion)", 
-        caption="Wikimedia Foundation") +
-    theme(plot.title = element_text(face="bold",size = "17"),
-        plot.subtitle = element_text(size = "12"),
-        plot.caption = element_text(size="12"),
-        axis.title.x = element_text(size ="15"),
-        axis.title.y = element_text(size="15"),
-        axis.text.x = element_text(size="10"),
-        axis.text.y = element_text(size="12"),
-        legend.position="top",
-        panel.border=element_blank())
-```
+Com base no modelo com cinco variáveis, podemos ver que os fatores de `cls_perc_eval`, `cls_students` e (surpreendentemente) `age` exercem pouca ou nenhuma influência sobre a variável resposta (por um IC que inclui zero ou p-valor inconclusivo), o que é inesperado, visto que o R2 destes fatores separadamente não pareciam inferiores aos de `bty_avg` e `gender`. Nas tabelas abaixo, para cada amostra, estão associadas cada uma das variáveis a modelos em que estão envolvidas, colocando lado a lado os respectivos R2 de tais modelos.
 
-### Q4. Tendo a duração da sessão como a diferença entre o primeiro e o último evento em uma sessão. Escolha uma variável dos dados e descreva seu relacionamento com a duração da sessão. Visualize o relacionamento.
 
-Tendo em vista o grande número de sessões de comprimento zero nos dados, à princípio vamos compara a variável `group` com os valores iguais a zero e diferentes de zero da variável `session_legth`.
+| <=150           | Modelo 1 | Modelo 2 | Modelo 3 | Modelo 4 | Modelo 5 | Modelo 6 |
+|-----------------|----------|----------|----------|----------|----------|----------|
+| `bty_avg`       | X        | X        | X        | X        | X        | X        |
+| `cls_students`  |          | X        |          |          |          | X        |
+| `age`           |          |          | X        |          |          | X        |
+| `cls_perc_eval` |          |          |          | X        |          | X        |
+| `gender`        |          |          |          |          | X        | X        |
+| **R2**          |**0.0192**|**0.0279**|**0.0305**|**0.0424**|**0.0427**|**0.0814**|
 
-```{r message=FALSE, warning=FALSE}
-sessions %>% 
-    mutate(
-        grupos = (
-        ifelse(session_legth==0, 
-               ifelse(group=='a',
-                      "A (Duração Zero)",
-                      "B (Duração Zero)"), 
-               ifelse(group=='a',
-                      "A (Diferente de Zero)",
-                      "B (Diferente de Zero)"))
-        )  ) %>% 
-    ggplot(aes(x = grupos, color=grupos, fill=grupos))  + 
-    geom_bar(position = "dodge")+
-    labs(x="Duração da Sessão por Grupo",  
-        y="Total", 
-        title="Sessões de Buscas Duráveis e Instantâneas", 
-        color='Grupos',
-        fill='Grupos',
-        subtitle="(group, density)", 
-        caption="Wikimedia Foundation") +
-    theme(plot.title = element_text(face="bold",size = "17"),
-        plot.subtitle = element_text(size = "12"),
-        plot.caption = element_text(size="12"),
-        axis.title.x = element_text(size ="15"),
-        axis.title.y = element_text(size="15"),
-        axis.text.x = element_blank(),
-        axis.text.y = element_text(size="12"),
-        panel.border=element_blank())
-```
 
-Perceba que o grupo "b" possui quase o triplo de sessões instantâneas em relação às duradouras, já no grupo "a" não existem sessões instantâneas. Isto nos dá uma nova evidência de que "a" e "b" dizem respeito a algum tipo de experimento, sendo "a" o grupo de controle e "b" o grupo experimental (comporetamento atípico).
+| >150            | Modelo 1 | Modelo 2 | Modelo 3 | Modelo 4 | Modelo 5 | Modelo 6 |
+|-----------------|----------|----------|----------|----------|----------|----------|
+| `bty_avg`       | X        | X        | X        | X        | X        | X        |
+| `gender`        |          | X        |          |          |          | X        |
+| `age`           |          |          | X        |          |          | X        |
+| `cls_perc_eval` |          |          |          | X        |          | X        |
+| `cls_students`  |          |          |          |          | X        | X        |
+| **R2**          |**0.5657**|    **-** |    **-** |    **-** |    **-** |**0.7991**|
 
-Comparando agora a duração da sessão (descartando sessões instantâneas) com o dia em que ela se inicia (`session_legth` e `day`, veja o gráfico), percebemos uma distribuição bastante homogênea com uma média e desvio padrão muito semelhantes dia após dia. Porém ligeiramente diferentes entre grupos, com "a" em média mais duradoura que "b". 
 
-```{r message=FALSE, warning=FALSE}
-sessions %>% 
-    filter(session_legth > 0) %>%
-    ggplot(aes(x = format(day, "%m-%d %a"), y = session_legth, color = group, fill=group))  + 
-    geom_jitter(height = .05, width = .3, alpha = 0.3) +
-    geom_boxplot(outlier.alpha = .0, color = "darkcyan") +
-    scale_y_log10()+
-    labs(x="Dias",  
-        y="Duração da Sessão", 
-        title="Duração da Sessão por Grupo para Sessões > 0", 
-        color='Grupos',
-        subtitle="(day, session_legth)", 
-        caption="Wikimedia Foundation") +
-    theme(plot.title = element_text(face="bold",size = "17"),
-        plot.subtitle = element_text(size = "12"),
-        plot.caption = element_text(size="12"),
-        axis.title.x = element_text(size ="15"),
-        axis.title.y = element_text(size="15"),
-        axis.text.x = element_text(size="10"),
-        axis.text.y = element_blank(),
-        legend.position="top",
-        panel.border=element_blank())
-```
+Com base nos resultados, podemos concluir que, diferente de nossa hipótese inicial, `cls_students` (total de estudantes), `cls_perc_eval` (percentual de estudantes que participaram) e `age` (idade do professor) exercem muito pouca influência sobre o `score` ou sobre o relacionamento entre `score`e `bty_avg`. Isto é surpreendente, sobretudo tendo em vista que usamos o total de estudantes para dividir nossa amostra em duas e os resultados foram bem diferentes de uma para outra. Com isto, podemos concluir que avaliações como estas em cursos voltados ao ensino em massa (>150 alunos) estão mais suscetíveis a sofrer influência de fatores como aparência do professor. Já na educação convencional (<=150 alunos) isto é pouco relevante.
 
 # Sumário
 
-A partir das quatro questões propostas levantamos hipóteses interessantes a respeito da natureza dos dados, chegamos a algumas conclusões úteis e pudemos entender melhor como estes estão correlacionados. Com base em **Q1** e o cálculo das sessões de buscas com acesso a resultados (cliques) pudemos ver uma grande discrepância nas proporções entre os grupos "a" e "b", o que sugere uma diferença funcional entre estas duas categorias. Encontramos resultado atípicos como buscas sem resultados e, mesmo assim, com acesso a *links* (que não existiam). Além de notarmos uma sutil melhora na taxa de cliques no meio da semana em relação ao fim de semana para "a" e o oposto para "b".
+A partir dos modelos propostos identificamos que o gênero e a beleza do professor de fato exercem influência sobre a avaliação do aluno. Contudo, tal influência tem magnitude muito baixa em cursos com 150 alunos ou menos e muito alta em cursos de ensino em massa com mais de 150 alunos (descreve 80% do comportamento da amostra). Além disto, foi surpreendente constatar que, diferente do esperado, a idade do professor é pouco significativa para o modelo, mesmo em cursos voltados para ensino em larga escala, onde vimos que o fator beleza é  significativo e muito relevante.
 
-Em **Q2**, percebemos que as pessoas tendem a dar preferência às primeiras opções dos resultados de busca, como era de se esperar. Além disto, observamos que, nos três primeiros dias da amostra, há um volume muito maior de usuários que clicaram mais de uma vez nos resultados. Já em **Q3**, notamos que o grupo "a" tem buscas sem resultados apenas nos dois ultimos dias da amostra, já "b", reforçando uma diferença mais profunda entre os dois grupos, oscila entre ter resultados vazios (em torno de 17%) e não ter, em dias diferentes. Além de identificarmos buscas vazias com cliques (apenas em "a"), já mencionados em **Q1**.
-
-Por fim, **Q4** analisou a duração de sessões, e logo no início da análise percebemos que o grupo "a" não apresentou sessões instantâneas (duração = 0), diferente de "b", o que pode sugerir que "b" não seja fruto de buscas convencionais. Além disto, descartando sessões instantâneas tanto em "a" quanto em "b", a distribuição dos tempos é bastante homogênea dia após dia, porém ligeiramente diferente entre os grupos.
+Uma próxima medida seria definir o que leva alunos do ensino em massa a apresentar tal comportamento em avaliações.
